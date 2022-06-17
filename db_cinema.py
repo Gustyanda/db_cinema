@@ -1,4 +1,5 @@
 from email.policy import default
+import json
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 import uuid, base64
@@ -27,7 +28,6 @@ class User(db.Model):
     balance=db.Column(db.Numeric(15,2), nullable=False, default=0)
     paygate_rel=db.relationship('Paygate', backref='user')
     order_rel=db.relationship('Order', backref='user')
-# on progress history
 
 class Category(db.Model):
     id=db.Column(db.Integer, primary_key=True, index=True)
@@ -49,9 +49,10 @@ class Theater(db.Model):
 class Schedule(db.Model):
     id=db.Column(db.Integer, primary_key=True, index=True)
     date_show=db.Column(db.Date)
-    date_end=db.Column(db.Date)
     status=db.Column(db.String)
     ticket_price=db.Column(db.Numeric(15,2), nullable=False)
+    remaining_capacity=db.Column(db.Integer)
+    total_audience=db.Column(db.Integer)
     movie_id=db.Column(db.Integer, db.ForeignKey('movie.id'), nullable=False)
     theater_id=db.Column(db.Integer, db.ForeignKey('theater.id'), nullable=False)
     order_rel=db.relationship('Order', backref='schedule')
@@ -71,7 +72,7 @@ class Order(db.Model):
     total_price=db.Column(db.Numeric(15,2), nullable=False)
     user_id=db.Column(db.Integer, db.ForeignKey('user.id'))
     schedule_id=db.Column(db.Integer, db.ForeignKey('schedule.id'))
-# on hold
+
 
 # generate database schema on startup, if not exists:
 db.create_all()
@@ -557,12 +558,12 @@ def get_schedule():
         return jsonify([
         {
             'date_show': x.date_show,
-            'date_end': x.date_end,
             'ticket_price': x.ticket_price,
             'movie':{
                 'title': x.movie.title},
             'theater':{
-                'name': x.theater.name}
+                'name': x.theater.name,
+                'remaining_capacity': x.theater.capacity}
         } for x in schedule
         ]), 200 
 
@@ -591,9 +592,10 @@ def create_schedule():
 
         schedule = Schedule(
             date_show=data['date_show'],
-            date_end=data['date_end'],
-            status='Unavailable',
+            status='Available',
             ticket_price=data['ticket_price'],
+            remaining_capacity=theater.capacity,
+            total_audience=0,
             movie_id=movie.id,
             theater_id=theater.id
         )
@@ -608,19 +610,14 @@ def create_schedule():
             'message': 'ACCESS DENIED !!'
         }, 400  
 
-@app.route('/schedule/<id>', methods=['PUT'])   # authorization separated by manager status true
+@app.route('/schedule/<id>', methods=['PUT'])   # authorization separated by manager status true, update status
 def update_schedule(id):
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
     if allow == True:
         data = request.get_json()
         schedule = Schedule.query.filter_by(id=id).first_or_404()  
-        schedule.date_show = data['date_show']
-        schedule.date_end = data['date_end']
         schedule.status = data['status']
-        schedule.ticket_price = data['ticket_price']
-        schedule.movie.title = data['title']
-        schedule.theater.name = data['name']
         db.session.commit()
         return {
             'message': 'DATA SUCCESSFULLY UPDATE !'
@@ -633,6 +630,109 @@ def update_schedule(id):
 
 
 
+# --------------- Cinema - Order
+@app.route('/order/<id>', methods=['GET'])   # authorization separated by user status id
+def get_order(id):
+    decode = request.headers.get('Authorization')
+    allow = auth_user(decode)
+    if allow == id:
+        user = User.query.filter_by(public_id=id).first()
+        return jsonify ([
+            {
+                'status': order.status,
+                'quantity': order.quantity,
+                'total_price': order.total_price,
+                'user':{
+                    'name': order.user.name
+                }
+            } for order in Order.query.filter_by(user_id=user.id).all()
+        ]), 200
+
+    else:
+        return {
+            'message': 'ACCESS DENIED !!'
+        }, 400   
+
+@app.route('/order/<id>', methods=['POST'])   # authorization separated by user status id
+def create_order(id):
+    decode = request.headers.get('Authorization')
+    allow = auth_user(decode)
+    if allow == id:
+        data = request.get_json()
+        movie = Movie.query.filter_by(title=data['title']).first()
+        theater = Theater.query.filter_by(name=data['name']).first()
+        schedule = Schedule.query.filter_by(movie_id=movie.id).filter_by(theater_id=theater.id).first()
+        if not schedule:
+            return {
+                'message': 'TITLE AND THEATER REQUIRED !'
+            }
+
+        if schedule.status == 'Unavailable':
+            return {
+                'message': 'NONE PREMIERE AVAILABLE !'
+            }       
+
+        schedule = Schedule.query.filter_by(remaining_capacity=schedule.remaining_capacity).first()
+        if schedule.remaining_capacity == 0:
+            return {
+                'message': 'SOLD OUT!'
+            }
+
+        user = User.query.filter_by(public_id=allow).first()
+        order = Order(
+            public_id=str(uuid.uuid4()),
+            status='ORDER',
+            quantity=data['quantity'],
+            total_price=data['quantity']*schedule.ticket_price,
+            user_id=user.id,
+            schedule_id=schedule.id
+        )
+        schedule.remaining_capacity -= data['quantity']
+        schedule.total_audience += data['quantity']
+        if user.balance < order.total_price:
+            return {
+                'message': 'INSUFFICIENT BALANCE !'
+            }    
+        user.balance -= order.total_price
+        db.session.add(order)
+        db.session.commit()
+        return {
+            'message': 'CREATE ORDER SUCCESFULLY !'
+        }, 200
+
+    else:
+        return {
+            'message': 'ACCESS DENIED !!'
+        }, 400   
+
+@app.route('/order', methods=['PUT'])   # authorization separated by manager status true and false
+def update_status_order():
+    decode = request.headers.get('Authorization')
+    allow = auth_manager(decode)
+    if allow == True or allow == False:
+        order = Order.query.all()
+        for x in order:
+            schedule = Schedule.query.filter_by(id=x.schedule_id).first_or_404()
+            if schedule.status == 'Unavailable':
+                x.status = 'EXPIRED'
+                db.session.commit()
+        
+        return {
+            'message': 'SUCCESSFULLY UPDATE !'
+        }                 
+        
+    else:
+        return {
+            'message': 'ACCESS DENIED !!'
+        }, 400 
 
 
 
+# --------------- Cinema - Best 5 -Reporting
+@app.route('/bestfive', methods=['GET'])
+def get_top():
+    result = db.engine.execute("select movie_id, sum(ticket_price*total_audience) as tp, mov.title from schedule s left join movie mov on s.movie_id = mov.id group by s.movie_id, mov.title order by tp desc limit 5")
+    x = []
+    for y in result:
+        x.append({'total revenue':y[1], 'title':y[2]})
+    return jsonify(x)
