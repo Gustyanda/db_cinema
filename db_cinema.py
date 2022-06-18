@@ -73,8 +73,8 @@ class Order(db.Model):
 
 
 # generate database schema on startup, if not exists:
-db.create_all()
-db.session.commit()
+# db.create_all()
+# db.session.commit()
 
 
 
@@ -364,6 +364,39 @@ def get_movie():
         } for movie in Movie.query.all()
     ]), 200
 
+# @app.route('/movie/search', methods=['POST']) #revisi
+# def search():    
+#     lst = []
+#     # data = request.get_json()
+#     # movie = Movie.query.filter_by(title=data['title']).first()
+#     # title = request.form['title']
+#     # search = "%{}%".format(title)
+#     # schedule = Schedule.query.filter(Movie.title.like(search))
+#     # schedule = Schedule.query.filter(Schedule.movie.has(search))
+#     # search = "%{}%".format(title)
+#     # movie = Movie.query.filter_by(title=data['title']).first()
+#     # schedule = Schedule.query.filter(Schedule.movie.ilike(search)).all()
+#     data = request.get_json()
+#     title = data['title']
+#     search = "%{}%".format(title)
+#     schedule = Schedule.query.filter(Schedule.movie.ilike(search))
+#     if not schedule:
+#             return {
+#                 'message': 'THERE NOT MOVIE YOU LOOKING FOR !'
+#             }       
+
+#     for x in schedule:
+#         if x:
+#             lst.append(
+#             {
+#                 'status': x.status,
+#                 'date_show': x.date_show,
+#                 'title': x.movie.title,
+#                 'name': x.theater.name
+#             }
+#         )
+#     return jsonify(lst)
+
 @app.route('/movie', methods=['POST'])   # authorization separated by manager status true
 def create_movie():
     decode = request.headers.get('Authorization')
@@ -642,6 +675,9 @@ def get_order(id):
                 'total_price': order.total_price,
                 'user':{
                     'name': order.user.name
+                },
+                'schedule':{
+                    'date_show': order.schedule.date_show
                 }
             } for order in Order.query.filter_by(user_id=user.id).all()
         ]), 200
@@ -649,7 +685,7 @@ def get_order(id):
     else:
         return {
             'message': 'ACCESS DENIED !!'
-        }, 400   
+        }, 400  
 
 @app.route('/order/<id>', methods=['POST'])   # authorization separated by user status id
 def create_order(id):
@@ -657,29 +693,35 @@ def create_order(id):
     allow = auth_user(decode)
     if allow == id:
         data = request.get_json()
-        movie = Movie.query.filter_by(title=data['title']).first()
-        theater = Theater.query.filter_by(name=data['name']).first()
-        schedule = Schedule.query.filter_by(movie_id=movie.id).filter_by(theater_id=theater.id).first()
-        if not schedule:
-            return {
-                'message': 'TITLE AND THEATER REQUIRED !'
-            }
+        result = db.engine.execute('select mv.title as Title, th.name as Theater from movie mv inner join schedule s on mv.id = s.movie_id inner join theater th on s.theater_id = th.id order by mv.title')
+        for x in result:
+            if data['title'] != x[0] or data['name'] != x[1]:
+                return {
+                    'message': 'TITLE, NAME THEATER REQUIRED NOR TITLE, NAME THEATER AVAILABLE !'
+                }, 400 # aman  
 
-        if schedule.status == 'Unavailable':
+        schedule = Schedule.query.filter_by(status='Unavailable').first()
+        if schedule:
             return {
                 'message': 'NONE PREMIERE AVAILABLE !'
-            }       
+            }, 400 # aman  
 
-        schedule = Schedule.query.filter_by(remaining_capacity=schedule.remaining_capacity).first()
-        if schedule.remaining_capacity == 0:
+        schedule = Schedule.query.filter_by(date_show=data['date_show']).all()
+        if not schedule:
+            return {
+                'message': 'NONE SCHEDULE AVAILABLE !'
+            }, 400 # aman
+
+        schedule = Schedule.query.filter_by(remaining_capacity=Schedule.remaining_capacity).first()
+        if schedule == 0:
             return {
                 'message': 'SOLD OUT!'
-            }
+            }, 400
 
         user = User.query.filter_by(public_id=allow).first()
         order = Order(
             public_id=str(uuid.uuid4()),
-            status='ORDER',
+            status='ACTIVE',
             quantity=data['quantity'],
             total_price=data['quantity']*schedule.ticket_price,
             user_id=user.id,
@@ -727,7 +769,7 @@ def update_status_order():
 
 
 # --------------- Cinema - Best 5 -Reporting
-@app.route('/bestfive', methods=['GET'])
+@app.route('/bestfive/revenue', methods=['GET'])
 def get_top():
     result = db.engine.execute("select movie_id, sum(ticket_price*total_audience) as tp, mov.title from schedule s left join movie mov on s.movie_id = mov.id group by s.movie_id, mov.title order by tp desc limit 5")
     x = []
