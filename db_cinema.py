@@ -364,38 +364,22 @@ def get_movie():
         } for movie in Movie.query.all()
     ]), 200
 
-# @app.route('/movie/search', methods=['POST']) #revisi
-# def search():    
-#     lst = []
-#     # data = request.get_json()
-#     # movie = Movie.query.filter_by(title=data['title']).first()
-#     # title = request.form['title']
-#     # search = "%{}%".format(title)
-#     # schedule = Schedule.query.filter(Movie.title.like(search))
-#     # schedule = Schedule.query.filter(Schedule.movie.has(search))
-#     # search = "%{}%".format(title)
-#     # movie = Movie.query.filter_by(title=data['title']).first()
-#     # schedule = Schedule.query.filter(Schedule.movie.ilike(search)).all()
-#     data = request.get_json()
-#     title = data['title']
-#     search = "%{}%".format(title)
-#     schedule = Schedule.query.filter(Schedule.movie.ilike(search))
-#     if not schedule:
-#             return {
-#                 'message': 'THERE NOT MOVIE YOU LOOKING FOR !'
-#             }       
+@app.route('/movie/search', methods=['POST'])
+def search():    
+    lst = []
+    data = request.get_json()   
+    result = db.engine.execute(f'''select s.*, mv.title as Title, th.name as Theater from movie mv inner join schedule s on mv.id = s.movie_id inner join theater th on s.theater_id = th.id where mv.title ilike '{data['title']}%%' ''')
+    for x in result:
 
-#     for x in schedule:
-#         if x:
-#             lst.append(
-#             {
-#                 'status': x.status,
-#                 'date_show': x.date_show,
-#                 'title': x.movie.title,
-#                 'name': x.theater.name
-#             }
-#         )
-#     return jsonify(lst)
+        lst.append(
+            {
+                'status': x[2],
+                'date_show': x[1],
+                'title': x[8],
+                'name': x[9]
+            }
+        )
+    return jsonify(lst)
 
 @app.route('/movie', methods=['POST'])   # authorization separated by manager status true
 def create_movie():
@@ -740,7 +724,6 @@ def create_order(id):
             'message': 'ACCESS DENIED !!'
         }, 400 
       
-
 @app.route('/order', methods=['PUT'])   # authorization separated by manager status true and false
 def update_status_order():
     decode = request.headers.get('Authorization')
