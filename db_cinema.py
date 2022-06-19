@@ -692,48 +692,43 @@ def create_order(id):
     decode = request.headers.get('Authorization')
     allow = auth_user(decode)
     if allow == id:
+        lst = []
         data = request.get_json()
-        result = db.engine.execute('select mv.title as Title, th.name as Theater from movie mv inner join schedule s on mv.id = s.movie_id inner join theater th on s.theater_id = th.id order by mv.title')
+        if data['title'] == "" or data ['name'] == "" or data['date_show'] == "":
+            return {
+                'message': 'YOUR INFORMATION DATA IS INCOMPLETE !'
+            }
+        result = db.engine.execute(f'''SELECT s.*, mv.title AS Title, th.name AS Theater FROM movie mv INNER JOIN schedule s on mv.id = s.movie_id INNER JOIN theater th on s.theater_id = th.id WHERE mv.title = '%s' and th.name = '%s' and status = '%s' and date_show = '%s' and remaining_capacity > 0 ORDER BY mv.title'''%(data['title'],data['name'],'Available',data['date_show']))
         for x in result:
-            if data['title'] != x[0] or data['name'] != x[1]:
-                return {
-                    'message': 'TITLE, NAME THEATER REQUIRED NOR TITLE, NAME THEATER AVAILABLE !'
-                }, 400 # aman  
-
-        schedule = Schedule.query.filter_by(status='Unavailable').first()
-        if schedule:
+            lst.append(x)
+       
+        if len(lst) == 0:
             return {
-                'message': 'NONE PREMIERE AVAILABLE !'
-            }, 400 # aman  
-
-        schedule = Schedule.query.filter_by(date_show=data['date_show']).all()
-        if not schedule:
-            return {
-                'message': 'NONE SCHEDULE AVAILABLE !'
-            }, 400 # aman
-
-        schedule = Schedule.query.filter_by(remaining_capacity=Schedule.remaining_capacity).first()
-        if schedule == 0:
-            return {
-                'message': 'SOLD OUT!'
-            }, 400
-
+                'message': 'YOUR REQUEST IS NOT IN OUR SCHEDULE !'
+            }, 400 # aman 
+  
+        schedule = Schedule.query.filter_by(id=x[0]).first()
         user = User.query.filter_by(public_id=allow).first()
         order = Order(
             public_id=str(uuid.uuid4()),
             status='ACTIVE',
             quantity=data['quantity'],
-            total_price=data['quantity']*schedule.ticket_price,
+            total_price=data['quantity']*lst[0][3],
             user_id=user.id,
             schedule_id=schedule.id
         )
-        schedule.remaining_capacity -= data['quantity']
-        schedule.total_audience += data['quantity']
-        if user.balance < order.total_price:
+        if order.total_price > user.balance:
             return {
                 'message': 'INSUFFICIENT BALANCE !'
-            }    
-        user.balance -= order.total_price
+            }   
+        
+        if order.quantity > x[4]:
+            return {
+                'message': 'INSUFFICIENT SEAT !'
+            }
+
+        schedule.remaining_capacity -= data['quantity']
+        schedule.total_audience += data['quantity']
         db.session.add(order)
         db.session.commit()
         return {
@@ -743,7 +738,8 @@ def create_order(id):
     else:
         return {
             'message': 'ACCESS DENIED !!'
-        }, 400   
+        }, 400 
+      
 
 @app.route('/order', methods=['PUT'])   # authorization separated by manager status true and false
 def update_status_order():
@@ -774,5 +770,13 @@ def get_top():
     result = db.engine.execute("select movie_id, sum(ticket_price*total_audience) as tp, mov.title from schedule s left join movie mov on s.movie_id = mov.id group by s.movie_id, mov.title order by tp desc limit 5")
     x = []
     for y in result:
-        x.append({'total revenue':y[1], 'title':y[2]})
+        x.append({'2. total revenue':y[1], '1. title':y[2]})
+    return jsonify(x)
+
+@app.route('/bestfive/ticket', methods=['GET'])
+def get_sales():
+    result = db.engine.execute('select movie_id, sum(total_audience) as ta, mov.title from schedule s left join movie mov on s.movie_id = mov.id group by s.movie_id, mov.title order by ta desc limit 5')
+    x = []
+    for y in result:
+        x.append({'2. ticket sales':y[1], '1. title':y[2]})
     return jsonify(x)
