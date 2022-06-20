@@ -47,6 +47,7 @@ class Theater(db.Model):
 class Schedule(db.Model):
     id=db.Column(db.Integer, primary_key=True, index=True)
     date_show=db.Column(db.Date)
+    time_show=db.Column(db.Time)
     status=db.Column(db.String)
     ticket_price=db.Column(db.Numeric(15,2), nullable=False)
     remaining_capacity=db.Column(db.Integer)
@@ -73,8 +74,8 @@ class Order(db.Model):
 
 
 # generate database schema on startup, if not exists:
-# db.create_all()
-# db.session.commit()
+db.create_all()
+db.session.commit()
 
 
 
@@ -120,7 +121,7 @@ def auth_user(auth):
     else:
         return 0
 
-# --------------- Automaticlly upate - Order
+# --------------- Automaticlly upate - Order User Ticket Holder
 def update_status_order():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
@@ -385,7 +386,9 @@ def search():
         lst.append(
             {
                 'status': x.status,
-                'date_show': x.date_show,
+                'date_show': x.date_show.strftime("%d-%m-%Y"),
+                'time_show': x.time_show.strftime("%H:%M"),
+                'remaining_capacity': x.remaining_capacity,
                 'title': x.title,
                 'name': x.theater
             }
@@ -583,7 +586,8 @@ def get_schedule():
     if schedule:
         return jsonify([
         {
-            'date_show': x.date_show,
+            'date_show': x.date_show.strftime("%d-%m-%Y"),
+            'time_show': x.time_show.strftime("%H:%M"),
             'ticket_price': x.ticket_price,
             'movie':{
                 'title': x.movie.title},
@@ -618,6 +622,7 @@ def create_schedule():
 
         schedule = Schedule(
             date_show=data['date_show'],
+            time_show=data['time_show'],
             status='Available',
             ticket_price=data['ticket_price'],
             remaining_capacity=theater.capacity,
@@ -673,7 +678,8 @@ def get_order(id):
                     'name': order.user.name
                 },
                 'schedule':{
-                    'date_show': order.schedule.date_show
+                    'date_show': order.schedule.date_show.strftime("%d-%m-%Y"),
+                    'time_show': order.schedule.time_show.strftime("%H:%M")
                 }
             } for order in Order.query.filter_by(user_id=user.id).all()
         ]), 200
@@ -694,14 +700,14 @@ def create_order(id):
             return {
                 'message': 'YOUR INFORMATION DATA IS INCOMPLETE !'
             }
-        result = db.engine.execute(f'''SELECT s.*, mv.title AS Title, th.name AS Theater FROM movie mv INNER JOIN schedule s on mv.id = s.movie_id INNER JOIN theater th on s.theater_id = th.id WHERE mv.title = '%s' and th.name = '%s' AND status = '%s' AND date_show = '%s' AND remaining_capacity > 0 ORDER BY mv.title'''%(data['title'],data['name'],'Available',data['date_show']))
+        result = db.engine.execute(f'''SELECT s.*, mv.title AS Title, th.name AS Theater FROM movie mv INNER JOIN schedule s on mv.id = s.movie_id INNER JOIN theater th on s.theater_id = th.id WHERE mv.title = '%s' and th.name = '%s' AND status = '%s' AND date_show = '%s' AND time_show = '%s' AND remaining_capacity > 0 ORDER BY mv.title'''%(data['title'],data['name'],'Available',data['date_show'],data['time_show']))
         for x in result:
             lst.append(x)
        
         if len(lst) == 0:
             return {
                 'message': 'YOUR REQUEST IS NOT IN OUR SCHEDULE !'
-            }, 400 # aman 
+            }, 400
   
         schedule = Schedule.query.filter_by(id=x.id).first()
         user = User.query.filter_by(public_id=allow).first()
