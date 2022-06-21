@@ -140,7 +140,7 @@ def get_home():
 
 
 
-# --------------- Cinema - User # on hold
+# --------------- Cinema - User
 @app.route('/user', methods=['POST'])
 def create_user():
     data = request.get_json()
@@ -199,6 +199,23 @@ def update_user(id):
         db.session.commit()
         return {
             'message': 'DATA SUCCESSFULLY UPDATE !'
+        }, 200
+
+    else:
+        return {
+            'message': 'ACCESS DENIED !!'
+        }, 400
+
+@app.route('/user/<id>', methods=['DELETE'])   # authorization separated by user status id
+def delete_user(id):
+    decode = request.headers.get('Authorization')
+    allow = auth_user(decode)
+    if allow == id:
+        user = User.query.filter_by(public_id=id).first_or_404()
+        db.session.delete(user)
+        db.session.commit()
+        return {
+            'message': 'DATA DELETE SUCCESSFULLY !'
         }, 200
 
     else:
