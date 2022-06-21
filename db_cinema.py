@@ -74,8 +74,8 @@ class Order(db.Model):
 
 
 # generate database schema on startup, if not exists:
-db.create_all()
-db.session.commit()
+# db.create_all()
+# db.session.commit()
 
 
 
@@ -123,15 +123,12 @@ def auth_user(auth):
 
 # --------------- Automaticlly upate - Order User Ticket Holder
 def update_status_order():
-    decode = request.headers.get('Authorization')
-    allow = auth_manager(decode)
-    if allow == True or allow == False:
-        order = Order.query.all()
-        for x in order:
-            schedule = Schedule.query.filter_by(id=x.schedule_id).first_or_404()
-            if schedule.status == 'Unavailable':
-                x.status = 'EXPIRED'
-                db.session.commit()
+    order = Order.query.all()
+    for x in order:
+        schedule = Schedule.query.filter_by(id=x.schedule_id).first_or_404()
+        if schedule.status == 'Unavailable':
+            x.status = 'EXPIRED'
+            db.session.commit()
 
 
 # --------------- Cinema - Home
