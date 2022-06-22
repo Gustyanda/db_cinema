@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 import uuid, base64
+from datetime import date
 
 app=Flask(__name__)
 db=SQLAlchemy(app)
@@ -71,6 +72,7 @@ class Order(db.Model):
     total_price=db.Column(db.Numeric(15,2), nullable=False)
     user_id=db.Column(db.Integer, db.ForeignKey('user.id'))
     schedule_id=db.Column(db.Integer, db.ForeignKey('schedule.id'))
+
 
 
 # generate database schema on startup, if not exists:
@@ -334,11 +336,11 @@ def delete_manager(id):
 
 
 # --------------- Cinema - Category
-@app.route('/category', methods=['GET'])   # authorization separated by manager status true
+@app.route('/category', methods=['GET'])   # authorization separated by manager t/f
 def get_category():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
-    if allow == True:
+    if allow == True or allow == False:
         return jsonify ([
             {
                 'tag':category.tag
@@ -350,11 +352,11 @@ def get_category():
             'message': 'ACCESS DENIED !!'
         }, 400
 
-@app.route('/category', methods=['POST'])   # authorization separated by manager status true
+@app.route('/category', methods=['POST'])   # authorization separated by manager t/f
 def create_category():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
-    if allow == True:
+    if allow == True or allow == False:
         data = request.get_json()
         if len(data['tag']) == 0:
             return {
@@ -652,8 +654,9 @@ def create_schedule():
                 'message': 'THEATER NAME FOR PREMIER SHOW REQUIRED !'
             }
 
+        today = date.today()
         schedule = Schedule(
-            date_show=data['date_show'],
+            date_show=today,
             time_show=data['time_show'],
             status='Available',
             ticket_price=data['ticket_price'],
@@ -661,7 +664,7 @@ def create_schedule():
             total_audience=0,
             movie_id=movie.id,
             theater_id=theater.id
-        )
+            )
         db.session.add(schedule)
         db.session.commit()
         return {
@@ -755,12 +758,13 @@ def create_order(id):
             return {
                 'message': 'INSUFFICIENT BALANCE !'
             }   
-        
+
         if order.quantity > x.remaining_capacity:
             return {
                 'message': 'INSUFFICIENT SEAT !'
             }
 
+        user.balance -= order.total_price #fixed
         schedule.remaining_capacity -= data['quantity']
         schedule.total_audience += data['quantity']
         db.session.add(order)
