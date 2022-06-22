@@ -441,6 +441,24 @@ def create_movie():
             'message': 'ACCESS DENIED !!'
         }, 400 
 
+@app.route('/movie/<title>', methods=['PUT'])   # authorization separated by manager status true, update by name
+def update_movie(title):
+    decode = request.headers.get('Authorization')
+    allow = auth_manager(decode)
+    if allow == True:
+        data = request.get_json()
+        movie = Movie.query.filter_by(title=title).first_or_404()
+        movie.title = data['title']
+        db.session.commit()
+        return {
+            'message': 'DATA SUCCESSFULLY UPDATE !'
+        }
+
+    else:
+        return {
+            'message': 'ACCESS DENIED !!'
+        }, 400   
+
 @app.route('/movie/<title>', methods=['DELETE'])   # authorization separated by manager status true, delete by title
 def delete_movie(title):
     decode = request.headers.get('Authorization')
