@@ -392,7 +392,7 @@ def get_movie():
         } for movie in Movie.query.all()
     ]), 200
 
-@app.route('/movie/search', methods=['POST'])   # revisi change execute 
+@app.route('/movie/search', methods=['POST'])   # revisi change output
 def search():    
     lst = []
     data = request.get_json()   
@@ -637,7 +637,7 @@ def get_schedule():
             'message': 'COMING SOON!'
         }, 400
 
-@app.route('/schedule', methods=['POST'])   # revisi change execute   # authorization separated by manager status true
+@app.route('/schedule', methods=['POST'])   # authorization separated by manager status true
 def create_schedule():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
@@ -677,7 +677,7 @@ def create_schedule():
             'message': 'ACCESS DENIED !!'
         }, 400  
 
-@app.route('/schedule', methods=['PUT'])   # authorization separated by manager status true, update status #fixed
+@app.route('/schedule', methods=['PUT'])   # authorization separated by manager status true, update status
 def update_schedule():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
@@ -726,7 +726,7 @@ def get_order(id):
             'message': 'ACCESS DENIED !!'
         }, 400  
 
-@app.route('/order/<id>', methods=['POST'])   # authorization separated by user status id
+@app.route('/order/<id>', methods=['POST'])   # revisi change execute   # authorization separated by user status id
 def create_order(id):
     decode = request.headers.get('Authorization')
     allow = auth_user(decode)
