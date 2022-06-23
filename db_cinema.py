@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 import uuid, base64
+from datetime import date, time, datetime
 
 app=Flask(__name__)
 db=SQLAlchemy(app)
@@ -35,6 +36,7 @@ class Category(db.Model):
 class Movie(db.Model):
     id=db.Column(db.Integer, primary_key=True, index=True)
     title=db.Column(db.String, nullable=False)
+    title_tag=db.Column(db.String)
     category_id=db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     schedule_rel=db.relationship('Schedule', backref='movie')
 
@@ -52,6 +54,8 @@ class Schedule(db.Model):
     ticket_price=db.Column(db.Numeric(15,2), nullable=False)
     remaining_capacity=db.Column(db.Integer)
     total_audience=db.Column(db.Integer)
+    movie_title=db.Column(db.String)
+    theater_name=db.Column(db.String)
     movie_id=db.Column(db.Integer, db.ForeignKey('movie.id'), nullable=False)
     theater_id=db.Column(db.Integer, db.ForeignKey('theater.id'), nullable=False)
     order_rel=db.relationship('Order', backref='schedule')
@@ -69,8 +73,10 @@ class Order(db.Model):
     status=db.Column(db.String)
     quantity=db.Column(db.Integer)
     total_price=db.Column(db.Numeric(15,2), nullable=False)
+    user_name=db.Column(db.String)
     user_id=db.Column(db.Integer, db.ForeignKey('user.id'))
     schedule_id=db.Column(db.Integer, db.ForeignKey('schedule.id'))
+
 
 
 # generate database schema on startup, if not exists:
@@ -224,6 +230,7 @@ def delete_user(id):
         }, 400
 
 
+
 # --------------- Cinema - Manager
 @app.route('/manager', methods=['GET'])   # authorization separated by manager status true
 def get_manager():
@@ -333,11 +340,11 @@ def delete_manager(id):
 
 
 # --------------- Cinema - Category
-@app.route('/category', methods=['GET'])   # authorization separated by manager status true
+@app.route('/category', methods=['GET'])   # authorization separated by manager t/f
 def get_category():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
-    if allow == True:
+    if allow == True or allow == False:
         return jsonify ([
             {
                 'tag':category.tag
@@ -349,11 +356,11 @@ def get_category():
             'message': 'ACCESS DENIED !!'
         }, 400
 
-@app.route('/category', methods=['POST'])   # authorization separated by manager status true
+@app.route('/category', methods=['POST'])   # authorization separated by manager t/f
 def create_category():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
-    if allow == True:
+    if allow == True or allow == False:
         data = request.get_json()
         if len(data['tag']) == 0:
             return {
@@ -383,13 +390,12 @@ def get_movie():
         {
             'title': movie.title,
             'category':{
-                'id': movie.category.id,
                 'tag': movie.category.tag
             }
         } for movie in Movie.query.all()
     ]), 200
 
-@app.route('/movie/search', methods=['POST'])
+@app.route('/movie/search', methods=['POST'])   # revisi change execute 
 def search():    
     lst = []
     data = request.get_json()   
@@ -419,7 +425,7 @@ def create_movie():
                 'message': 'TITLE REQUIRED !'
             }, 400
 
-        category = Category.query.filter_by(tag=data['tag']).first()
+        category = Category.query.filter_by(id=data['category_id']).first()
         if not category:
             return {
                 'message': 'TAG REQUIRED !'
@@ -427,7 +433,8 @@ def create_movie():
         
         movie = Movie(
             title=data['title'],
-            category_id=category.id
+            category_id=data['category_id'],
+            title_tag=category.tag
         )
         db.session.add(movie)
         db.session.commit()
@@ -439,6 +446,24 @@ def create_movie():
         return {
             'message': 'ACCESS DENIED !!'
         }, 400 
+
+@app.route('/movie/<title>', methods=['PUT'])   # authorization separated by manager status true, update by name
+def update_movie(title):
+    decode = request.headers.get('Authorization')
+    allow = auth_manager(decode)
+    if allow == True:
+        data = request.get_json()
+        movie = Movie.query.filter_by(title=title).first_or_404()
+        movie.title = data['title']
+        db.session.commit()
+        return {
+            'message': 'DATA SUCCESSFULLY UPDATE !'
+        }
+
+    else:
+        return {
+            'message': 'ACCESS DENIED !!'
+        }, 400   
 
 @app.route('/movie/<title>', methods=['DELETE'])   # authorization separated by manager status true, delete by title
 def delete_movie(title):
@@ -546,12 +571,12 @@ def get_top_up(id):
         user = User.query.filter_by(public_id=id).first_or_404()
         return jsonify([
             {
-                'amount':paygate.amount,
-                'status':paygate.status,
-                'public_id':paygate.public_id,
                 'user':{
                     'name':paygate.user.name
-                }
+                },
+                'public_id':paygate.public_id,
+                'status':paygate.status,
+                'amount':paygate.amount
             } for paygate in Paygate.query.filter_by(user_id=user.id).all()
         ]), 200
 
@@ -599,13 +624,12 @@ def get_schedule():
     if schedule:
         return jsonify([
         {
+            'movie_title': x.movie_title,
+            'theater_name': x.theater_name,
             'date_show': x.date_show.strftime("%d-%m-%Y"),
             'time_show': x.time_show.strftime("%H:%M"),
             'ticket_price': x.ticket_price,
-            'movie':{
-                'title': x.movie.title},
             'theater':{
-                'name': x.theater.name,
                 'remaining_capacity': x.theater.capacity}
         } for x in schedule
         ]), 200 
@@ -615,7 +639,7 @@ def get_schedule():
             'message': 'COMING SOON!'
         }, 400
 
-@app.route('/schedule', methods=['POST'])   # authorization separated by manager status true
+@app.route('/schedule', methods=['POST'])   # revisi change execute   # authorization separated by manager status true
 def create_schedule():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
@@ -633,16 +657,19 @@ def create_schedule():
                 'message': 'THEATER NAME FOR PREMIER SHOW REQUIRED !'
             }
 
+        today = date.today()
         schedule = Schedule(
-            date_show=data['date_show'],
+            date_show=data['date_show'] or today,
             time_show=data['time_show'],
             status='Available',
             ticket_price=data['ticket_price'],
             remaining_capacity=theater.capacity,
             total_audience=0,
+            movie_title=movie.title,
+            theater_name=theater.name,
             movie_id=movie.id,
             theater_id=theater.id
-        )
+            )
         db.session.add(schedule)
         db.session.commit()
         return {
@@ -654,14 +681,15 @@ def create_schedule():
             'message': 'ACCESS DENIED !!'
         }, 400  
 
-@app.route('/schedule/<id>', methods=['PUT'])   # authorization separated by manager status true, update status
-def update_schedule(id):
+@app.route('/schedule', methods=['PUT'])   #fixed   # authorization separated by manager status true, update status
+def update_schedule():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
     if allow == True:
-        data = request.get_json()
-        schedule = Schedule.query.filter_by(id=id).first_or_404()  
-        schedule.status = data['status']
+        schedule = Schedule.query.all()
+        for x in schedule:
+            if x.date_show.strftime("%d-%m-%Y") < datetime.today().strftime("%d-%m-%Y") or x.time_show.strftime("%H:%M") < datetime.today().time().strftime("%H:%M"):
+                x.status = 'Unavailable'
         db.session.commit()
         update_status_order()
         return {
@@ -729,6 +757,7 @@ def create_order(id):
             status='ACTIVE',
             quantity=data['quantity'],
             total_price=data['quantity']*x.ticket_price,
+            user_name=user.name,
             user_id=user.id,
             schedule_id=schedule.id
         )
@@ -736,12 +765,13 @@ def create_order(id):
             return {
                 'message': 'INSUFFICIENT BALANCE !'
             }   
-        
+
         if order.quantity > x.remaining_capacity:
             return {
                 'message': 'INSUFFICIENT SEAT !'
             }
 
+        user.balance -= order.total_price #fixed
         schedule.remaining_capacity -= data['quantity']
         schedule.total_audience += data['quantity']
         db.session.add(order)
