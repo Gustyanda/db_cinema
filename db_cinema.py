@@ -399,21 +399,21 @@ def get_movie():
 def search():    
     lst = []
     data = request.get_json()   
-    result = db.engine.execute(f'''SELECT s.*, mv.title as Title, th.name as Theater FROM movie mv INNER JOIN schedule s on mv.id = s.movie_id INNER JOIN theater th on s.theater_id = th.id WHERE mv.title ilike '{data['title']}%%' AND status = 'Available' ''')
+    result = db.engine.execute(f'''SELECT schedule.* FROM schedule WHERE movie_title ILIKE '{data['title']}%%' AND status = 'Available' ORDER BY id''')
     for x in result:
-
-        lst.append(
-            {
-                'status': x.status,
-                'date_show': x.date_show.strftime("%d-%m-%Y"),
-                'time_show': x.time_show.strftime("%H:%M"),
-                'remaining_capacity': x.remaining_capacity,
-                'title': x.title,
-                'name': x.theater
-            }
-        )
+        if x:
+            lst.append(
+                    {
+                    'status': x.status,
+                    'date_show': x.date_show.strftime("%d-%m-%Y"),
+                    'time_show': x.time_show.strftime("%H:%M"),
+                    'remaining_capacity': x.remaining_capacity,
+                    'title': x.movie_title,
+                    'name': x.theater_name
+                    }
+                )
     return jsonify(lst)
-
+        
 @app.route('/movie', methods=['POST'])   # authorization separated by manager status true
 def create_movie():
     decode = request.headers.get('Authorization')
@@ -747,7 +747,7 @@ def create_order(id):
        
         if len(lst) == 0:
             return {
-                'message': 'YOUR REQUEST IS NOT IN OUR SCHEDULE !'
+                'message': 'YOUR REQUEST IS UNAVAILABLE !'
             }, 400
   
         schedule = Schedule.query.filter_by(id=x.id).first()
