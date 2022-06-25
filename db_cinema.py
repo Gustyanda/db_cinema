@@ -681,7 +681,7 @@ def create_schedule():
             'message': 'ACCESS DENIED !!'
         }, 400  
 
-@app.route('/schedule', methods=['PUT'])   #fixed bug date and time  # authorization separated by manager status true, update status
+@app.route('/schedule', methods=['PUT'])   # authorization separated by manager status true, update status
 def update_schedule():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
@@ -798,8 +798,8 @@ def get_top():
 
 @app.route('/bestfive/ticket', methods=['GET'])
 def get_sales():
-    result = db.engine.execute('select movie_id, sum(total_audience) as ta, mov.title from schedule s left join movie mov on s.movie_id = mov.id group by s.movie_id, mov.title order by ta desc limit 5')
+    result = db.engine.execute('SELECT movie_id, movie_title, SUM(total_audience) AS total_audience FROM schedule GROUP BY movie_id, movie_title ORDER BY total_audience DESC LIMIT 5')
     x = []
     for y in result:
-        x.append({'2. ticket sales':y[1], '1. title':y[2]})
+        x.append({'1. title':y[1], '2. ticket sales':y[2]})
     return jsonify(x)
