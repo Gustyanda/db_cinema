@@ -790,10 +790,10 @@ def create_order(id):
 # --------------- Cinema - Best 5 -Reporting
 @app.route('/bestfive/revenue', methods=['GET'])
 def get_top():
-    result = db.engine.execute("select movie_id, sum(ticket_price*total_audience) as tp, mov.title from schedule s left join movie mov on s.movie_id = mov.id group by s.movie_id, mov.title order by tp desc limit 5")
+    result = db.engine.execute("select movie_id, movie_title, sum(ticket_price*total_audience) as sales from schedule group by movie_id, movie_title order by sales desc limit 5")
     x = []
     for y in result:
-        x.append({'2. total revenue':y[1], '1. title':y[2]})
+        x.append({'1. title':y[1], '2. revenue sales':y[2]})
     return jsonify(x)
 
 @app.route('/bestfive/ticket', methods=['GET'])
