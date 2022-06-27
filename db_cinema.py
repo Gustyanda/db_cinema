@@ -639,7 +639,7 @@ def get_schedule():
             'message': 'COMING SOON!'
         }, 400
 
-@app.route('/schedule', methods=['POST'])   # revisi change execute   # authorization separated by manager status true
+@app.route('/schedule', methods=['POST'])   # authorization separated by manager status true
 def create_schedule():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
@@ -681,8 +681,33 @@ def create_schedule():
             'message': 'ACCESS DENIED !!'
         }, 400  
 
-@app.route('/schedule', methods=['PUT'])   # authorization separated by manager status true, update status
-def update_schedule():
+@app.route('/schedule/<id>', methods=['PUT'])   # authorization separated by manager status true
+def update_schedule(id):
+    decode = request.headers.get('Authorization')
+    allow = auth_manager(decode)
+    if allow == True:
+        data = request.get_json()
+        schedule = Schedule.query.filter_by(id=id).first_or_404()
+        schedule.date_show = data['date_show']
+        schedule.time_show = data['time_show']
+        schedule.status = data['status']
+        schedule.ticket_price = data['ticket_price']
+        schedule.movie_title = data['movie_title']
+        schedule.theater_name = data['theater_name']
+        schedule.movie_id = data['movie_id']
+        schedule.theater_id = data['theater_id']
+        db.session.commit()
+        return {
+            'message': 'DATA SUCCESSFULLY UPDATE !'
+        }
+
+    else:
+        return {
+            'message': 'ACCESS DENIED !!'
+        }, 400       
+
+@app.route('/schedule/status', methods=['PUT'])   # authorization separated by manager status true, update status
+def update_status_schedule():
     decode = request.headers.get('Authorization')
     allow = auth_manager(decode)
     if allow == True:
@@ -700,6 +725,8 @@ def update_schedule():
         return {
             'message': 'ACCESS DENIED !!'
         }, 400   
+
+
 
 
 
@@ -793,7 +820,7 @@ def get_top():
     result = db.engine.execute("select movie_id, movie_title, sum(ticket_price*total_audience) as sales from schedule group by movie_id, movie_title order by sales desc limit 5")
     x = []
     for y in result:
-        x.append({'1. title':y[1], '2. revenue sales':y[2]})
+        x.append({'title':y[1], 'revenue_sales':y[2]})
     return jsonify(x)
 
 @app.route('/bestfive/ticket', methods=['GET'])
@@ -801,5 +828,5 @@ def get_sales():
     result = db.engine.execute('SELECT movie_id, movie_title, SUM(total_audience) AS total_audience FROM schedule GROUP BY movie_id, movie_title ORDER BY total_audience DESC LIMIT 5')
     x = []
     for y in result:
-        x.append({'1. title':y[1], '2. ticket sales':y[2]})
+        x.append({'title':y[1], 'ticket_sales':y[2]})
     return jsonify(x)
