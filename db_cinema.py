@@ -728,8 +728,6 @@ def update_status_schedule():
 
 
 
-
-
 # --------------- Cinema - Order
 @app.route('/order/<id>', methods=['GET'])   # authorization separated by user status id
 def get_order(id):
@@ -829,4 +827,12 @@ def get_sales():
     x = []
     for y in result:
         x.append({'title':y[1], 'ticket_sales':y[2]})
+    return jsonify(x)
+
+@app.route('/bestfive/user', methods=['GET'])
+def get_topuser():
+    result = db.engine.execute(f'''SELECT user_id, user_name, SUM(quantity) AS total_ticket, SUM(quantity*total_price) AS total_spend FROM "order" GROUP BY user_id, user_name ORDER BY total_ticket DESC LIMIT 5 ''')
+    x = []
+    for y in result:
+        x.append({'user_name':y[1], 'total_ticket':y[2], 'total_spend':y[3]})
     return jsonify(x)
